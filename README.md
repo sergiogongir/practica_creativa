@@ -2,6 +2,8 @@
 
 A real-time application that predicts flight delays using a Random Forest model trained on 2015 US flight data. Users submit flight details through a Flask web interface, which sends the request via Kafka to a Spark Streaming job that applies the model and stores the prediction in MongoDB, which the web interface polls to display the result.
 
+![Architecture](images/arquitectura.png)
+
 ## Based on
 This project is based on [practica_creativa](https://github.com/Big-Data-ETSIT/practica_creativa) 
 from Big-Data-ETSIT, which is itself based on 
