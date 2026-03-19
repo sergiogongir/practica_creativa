@@ -4,7 +4,7 @@ A real-time application that predicts flight delays using a Random Forest model 
 
 <div align="center">
   <img src="images/arquitectura.png" alt="Architecture"/>
-  <p><em>Architecture diagram created with <a href="https://app.diagrams.net/">Draw.io</a></em></p>
+  <p><em>Figure 1: Architecture diagram created with <a href="https://app.diagrams.net/">Draw.io</a></em></p>
 </div>
 
 ## Based on
