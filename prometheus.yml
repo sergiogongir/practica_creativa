@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s      # cada cuánto recoge métricas
+  evaluation_interval: 15s  # cada cuánto evalúa reglas de alertas
+
+scrape_configs:
+  # Prometheus se monitoriza a sí mismo
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Métricas de Flask (requiere prometheus-flask-exporter)
+  - job_name: 'flask'
+    static_configs:
+      - targets: ['flask:5001']
+    metrics_path: '/metrics'
+
+  # Métricas de Kafka (requiere kafka-exporter como servicio extra)
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+
+  # Métricas de Cassandra (requiere cassandra-exporter como servicio extra)
+  - job_name: 'cassandra'
+    static_configs:
+      - targets: ['cassandra-exporter:9500']

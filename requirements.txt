@@ -24,3 +24,4 @@ elasticsearch==2.4.1
 joblib
 cassandra-driver
 flask-socketio
+prometheus-flask-exporter

@@ -3,6 +3,7 @@ from flask import Flask, render_template, request
 from pymongo import MongoClient
 from bson import json_util
 from flask_socketio import SocketIO, emit
+from prometheus_flask_exporter import PrometheusMetrics
 
 # Configuration details
 import config
@@ -14,8 +15,20 @@ import predict_utils
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'flight-delay-secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
+metrics = PrometheusMetrics(app, path=None)
 
-client = MongoClient(os.environ.get("MONGO_HOST", "localhost"), 27017)
+@app.route('/metrics')
+def prometheus_metrics():
+  from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+  from flask import Response
+  return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+client = MongoClient(
+    os.environ.get("MONGO_HOST", "localhost"),
+    27017,
+    username=os.environ.get("MONGO_USER"),
+    password=os.environ.get("MONGO_PASSWORD")
+)
 
 from pyelasticsearch import ElasticSearch
 elastic = ElasticSearch(config.ELASTIC_URL)
@@ -42,8 +55,10 @@ prediction_cache = {}
 def kafka_consumer_thread():
   consumer = KafkaConsumer(
     RESPONSE_TOPIC,
-    bootstrap_servers=['kafka:9092'],
+    bootstrap_servers=[os.environ.get("KAFKA_HOST", "localhost") + ':9092'],
     api_version=(3, 8, 0),
+    auto_offset_reset='latest',
+    group_id=None,
     value_deserializer=lambda m: json.loads(m.decode('utf-8'))
   )
   print("Kafka consumer thread started, listening on:", RESPONSE_TOPIC)
@@ -551,6 +566,10 @@ def on_subscribe(data):
     if unique_id in prediction_cache:
       print("Sending cached prediction for UUID:", unique_id)
       emit('prediction_result', prediction_cache.pop(unique_id))
+
+@app.route("/health")
+def health():
+    return {"status": "ok"}, 200
 
 def shutdown_server():
   func = request.environ.get('werkzeug.server.shutdown')

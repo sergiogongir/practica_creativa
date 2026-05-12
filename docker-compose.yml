@@ -24,6 +24,12 @@ services:
       volumes:
         - minio_data:/data
       command: server /data --console-address ":9001"
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
+
 
     #Kakfa
     kafka:
@@ -47,16 +53,29 @@ services:
       image: mongo:7.0
       ports:
         - "27017:27017"
+      environment:
+        MONGO_INITDB_ROOT_USERNAME: admin
+        MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
       volumes:
         - mongodb_data:/data/db
+      healthcheck:
+        test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
 
-    #Flask
     cassandra-init:
       image: cassandra:4.1
       volumes:
         - ./resources/init_cassandra.cql:/init.cql
-      command: >
-        bash -c "sleep 10 && cqlsh cassandra -f /init.cql"
+      command: > #Revisar esto
+        bash -c "
+          until cqlsh cassandra -e 'DESCRIBE KEYSPACES' > /dev/null 2>&1; do
+            echo 'Esperando a Cassandra...'
+            sleep 2
+          done &&
+          cqlsh cassandra -f /init.cql
+        "
       depends_on:
         cassandra:
           condition: service_healthy
@@ -90,13 +109,24 @@ services:
         - "5001:5001"
       environment:
         MONGO_HOST: mongodb
+        MONGO_USER: admin
+        MONGO_PASSWORD: ${MONGO_PASSWORD}
         PROJECT_HOME: /app
         CASSANDRA_HOST: cassandra
         KAFKA_HOST: kafka
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+        interval: 30s
+        timeout: 10s
+        retries: 5
+        start_period: 15s   # da tiempo a que Flask arranque
       depends_on:
-        - kafka
-        - cassandra
-        - mongodb
+        kafka:
+          condition: service_started
+        cassandra:
+          condition: service_healthy
+        mongodb:
+          condition: service_healthy
 
     #Spark
     spark-master:
@@ -111,6 +141,12 @@ services:
       image: apache/spark:3.5.3
       entrypoint: /opt/spark/bin/spark-class
       command: org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+      deploy:
+        replicas: 3
+        resources:
+          limits:
+            cpus: '2'
+            memory: 2g
       depends_on:
         - spark-master
 
@@ -140,6 +176,45 @@ services:
           condition: service_completed_successfully
         kafka-init:
           condition: service_completed_successfully
+    
+    prometheus:
+      image: prom/prometheus
+      ports:
+        - "9090:9090"
+      volumes:
+        - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      depends_on:
+        flask:
+          condition: service_healthy
+
+    grafana:
+      image: grafana/grafana
+      ports:
+        - "3000:3000"
+      volumes:
+        - ./grafana/provisioning:/etc/grafana/provisioning
+        - ./grafana/dashboards:/var/lib/grafana/dashboards
+      depends_on:
+        - prometheus
+
+    kafka-exporter:
+      image: danielqsj/kafka-exporter:latest
+      ports:
+        - "9308:9308"
+      command: --kafka.server=kafka:9092
+      depends_on:
+        - kafka
+        
+    cassandra-exporter:
+      image: criteord/cassandra_exporter:latest
+      ports:
+        - "9500:9500"
+      environment:
+        CASSANDRA_HOST: cassandra
+        CASSANDRA_PORT: 9042
+      depends_on:
+        - cassandra
+
 
 volumes:
   cassandra_data:
